@@ -31,6 +31,11 @@ enum OperandType {
 	FromMem(u16),
 }
 
+enum FromMemType {
+	Single(OperandType, i16),
+	Double(OperandType, OperandType, i16, bool),
+}
+
 impl Processor {
 	pub fn new() -> Processor {
 		Processor {
@@ -124,26 +129,37 @@ impl Processor {
 		}
 	}
 
+	fn register_type(value: u16) -> Option<OperandType> {
+		match value {
+			0 => { Some(OperandType::RegA) }
+			1 => { Some(OperandType::RegB) }
+			2 => { Some(OperandType::RegC) }
+			3 => { Some(OperandType::RegT) }
+			4 => { Some(OperandType::RegSP) }
+			5 => { Some(OperandType::RegVP) }
+			6 => { Some(OperandType::RegPP) }
+			7 => { Some(OperandType::RegFL) }
+			_ => { None }
+		}
+	}
+
 	// Converts an operator offset into an Operand enum.
 	fn instruction_type(&self, op_offset: u16, operand_address: u16) -> (OperandType, u16) {
-		match op_offset {
-			0 => { (OperandType::RegA,	0) }
-			1 => { (OperandType::RegB,	0) }
-			2 => { (OperandType::RegC,	0) }
-			3 => { (OperandType::RegT,	0) }
-			4 => { (OperandType::RegSP,	0) }
-			5 => { (OperandType::RegVP,	0) }
-			6 => { (OperandType::RegPP,	0) }
-			7 => { (OperandType::RegFL,	0) }
-			8 => {
-				let next_short = self.read_mem(operand_address);
-				(OperandType::Literal(next_short), 1)
+		let register = Processor::register_type(op_offset);
+
+		match register {
+			Some(reg) => (reg, 0),
+			None => match op_offset {
+				8 => {
+					let next_short = self.read_mem(operand_address);
+					(OperandType::Literal(next_short), 1)
+				}
+				9 => {
+					let next_short = self.read_mem(operand_address);
+					(OperandType::FromMem(next_short), 1)
+				}
+				_ => { panic!("Invalid operand offset: {}", op_offset); }
 			}
-			9 => {
-				let next_short = self.read_mem(operand_address);
-				(OperandType::FromMem(next_short), 1)
-			}
-			_ => { panic!("Invalid operand offset: {}", op_offset); }
 		}
 	}
 
@@ -153,6 +169,78 @@ impl Processor {
 		let (type_two, op_count_b) = self.instruction_type(op_offset / 10, self.reg_pp + 1 + op_count_a);
 
 		(type_one, type_two, op_count_a + op_count_b + 1)
+	}
+
+	fn from_mem_decode(data: u16) -> FromMemType {
+		let two_registers = data &	0b0000000000001000;
+
+		if two_registers == 0 {
+			let register = data &	0b0000000000000111;
+			let offset = data &		0b1111111111110000 >> 4;
+
+			match Processor::register_type(register) {
+				Some(reg) => FromMemType::Single(reg, offset as i16),
+				None => panic!("Impossible state"),
+			}
+		}
+		else{
+			let register_a = data &	0b0000000000000111;
+			let register_b = data &	0b0000000001110000 >> 4;
+			let subtract = data & 	0b0000000010000000 > 0;
+			let offset = data &		0b1111111100000000 >> 8;
+
+			let register_a = match Processor::register_type(register_a) {
+				Some(reg) => reg,
+				None => panic!("Impossible state"),
+			};
+
+			let register_b = match Processor::register_type(register_b) {
+				Some(reg) => reg,
+				None => panic!("Impossible state"),
+			};
+
+			FromMemType::Double(register_a, register_b, offset as i16, subtract)
+		}
+		
+	}
+
+	fn from_mem_write(&mut self, data: u16, value: u16) {
+		let from_mem_type = Processor::from_mem_decode(data);
+
+		match from_mem_type {
+			FromMemType::Single(reg, offset) => {
+				let write_address = self.cpu_read(reg, false) as isize + offset as isize;
+				
+
+				self.write_mem(write_address as u16, value);
+			},
+			FromMemType::Double(reg_a, reg_b, offset, subtract) => {
+				let reg_b_signed = self.cpu_read(reg_b, false) as isize * if subtract {-1} else {1};
+				let write_address = self.cpu_read(reg_a, false) as isize + reg_b_signed + offset as isize;
+				
+				
+				self.write_mem(write_address as u16, value);
+			}
+		}
+	}
+
+	fn from_mem_read(&self, data: u16) -> u16 {
+		let from_mem_type = Processor::from_mem_decode(data);
+
+		match from_mem_type {
+			FromMemType::Single(reg, offset) => {
+				let read_address = self.cpu_read(reg, false) as isize + offset as isize;
+				
+				self.read_mem(read_address as u16)
+			},
+			FromMemType::Double(reg_a, reg_b, offset, subtract) => {
+				let reg_b_signed = self.cpu_read(reg_b, false) as isize * if subtract {-1} else {1};
+				let read_address = self.cpu_read(reg_a, false) as isize + reg_b_signed + offset as isize;
+				
+				
+				self.read_mem(read_address as u16)
+			}
+		}
 	}
 
 	// The op_write and op_read functions are here so that you don't have to think about where you're reading/writing to in the operation functions,
@@ -168,7 +256,7 @@ impl Processor {
 			OperandType::RegPP				=> { self.reg_pp	= value; }
 			OperandType::RegFL				=> { self.reg_fl	= value; }
 			OperandType::Literal(address)	=> { self.write_mem(address, value); }
-			_ => { panic!("Invalid OperandType."); }
+			OperandType::FromMem(data)		=> { self.from_mem_write(data, value); }
 		}
 	}
 
@@ -183,7 +271,7 @@ impl Processor {
 			OperandType::RegPP				=> { self.reg_pp	}
 			OperandType::RegFL				=> { self.reg_fl	}
 			OperandType::Literal(value)		=> { if source {value} else {self.read_mem(value)} }
-			_ => { panic!("Invalid OperandType."); }
+			OperandType::FromMem(data)		=> { self.from_mem_read(data) }
 		}
 	}
 
