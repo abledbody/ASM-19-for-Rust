@@ -172,11 +172,13 @@ impl Processor {
 	}
 
 	fn from_mem_decode(data: u16) -> FromMemType {
-		let two_registers = data &	0b0000000000001000;
+		let two_registers = data &	0b1000;				// 0000,0000,0000,1000
 
 		if two_registers == 0 {
-			let register = data &	0b0000000000000111;
-			let offset = data &		0b1111111111110000 >> 4;
+			let register = data &	0b111;				// 0000,0000,0000,0111
+			let offset = data >> 4 & 0b111111111111 ;	// 1111,1111,1111,0000
+
+			println!("Decoding from_mem, got offset of {}", offset as i16);
 
 			match Processor::register_type(register) {
 				Some(reg) => FromMemType::Single(reg, offset as i16),
@@ -184,10 +186,10 @@ impl Processor {
 			}
 		}
 		else{
-			let register_a = data &	0b0000000000000111;
-			let register_b = data &	0b0000000001110000 >> 4;
-			let subtract = data & 	0b0000000010000000 > 0;
-			let offset = data &		0b1111111100000000 >> 8;
+			let register_a = data &	0b111;			// 0000,0000,0000,0111
+			let register_b = data >> 4 & 0b111;		// 0000,0000,0111,0000
+			let subtract = data & 	0b10000000 > 0;	// 0000,0000,1000,0000
+			let offset = data >> 8 & 0b11111111 ;	// 1111,1111,0000,0000
 
 			let register_a = match Processor::register_type(register_a) {
 				Some(reg) => reg,

@@ -1,5 +1,6 @@
 local bit = require("bit")
-local band, rshift = bit.band, bit.rshift
+local band, rshift, lshift = bit.band, bit.rshift, bit.lshift
+local abs = math.abs
 
 local inputPath, outputPath = ...
 
@@ -77,10 +78,9 @@ local operationTypes = {
 
 --== DATA ==--
 
-local replaceMarkers = {}
-local markers = {}
-local shortData = {}
+local replaceLabels = {}
 local constants = {}
+local shortData = {}
 
 local lineNum = 0
 local sdPointer = 0
@@ -118,9 +118,26 @@ local function encodeOperation(opType, op1, op2)
  return opCode
 end
 
-local function encodeFromMemory(register, offset)
- -- WRITE ME
- return 0
+local function encodeFromMemory(register, register2, reg2sign, offset)
+ if register2 then
+  print("I haven't implemented multiple-register FromMem reads, yet.")
+  os.exit(0)
+ else
+  local operand
+  
+  if offset then
+   if offset < 0 then
+    print("I haven't implemented negative inline FromMem offsets, yet.")
+    os.exit(0)
+   else
+    operand = register + lshift(offset, 4) 
+   end
+  else
+   operand = register
+  end
+  
+  return operand
+ end
 end
 
 
@@ -128,33 +145,53 @@ local function parseOperand(operand)
  local ret
  
  local opType = registers[operand]
- if opType then
+ if opType then -- This is just a reference to a register. No need to get fancy.
   ret = {type = opType}
- else
+ else -- It's not a register.
   local inBrackets = operand:match("%[(.*)%]")
   
-  if inBrackets then
+  if inBrackets then --Try and read it as a FromMem operation
    local offsetIndex = inBrackets:find("[%+%-]")
+   local offset
    
-   local offset = 0
-   local register
+   local registerName
+   local offsetIndex2
+   local register2
    
-   if offsetIndex then
+   if offsetIndex then --Something else is offsetting this register.
     offset = tonumber(inBrackets:sub(offsetIndex))
     
-    if not offset then
-     print("Line "..lineNum..", Invalid offset: "..inBrackets:sub(offsetIndex))
-     os.exit(0)
+    if not offset then --Likely a second register
+     offsetIndex2 = inBrackets:find("[%+%-]", offsetIndex);
+     register2 = inBrackets:sub(offsetIndex + 1, offsetIndex2 - 1);
+     offset = tonumber(inBrackets:sub(offsetIndex2))
+     
+     if not offset then
+      print("Line "..lineNum..", Unknown from-memory configuration: "..inBrackets)
+      os.exit(0)
+     end
     end
     
-    register = inBrackets:sub(0, offsetIndex - 1)
-   else
-    register = inBrackets
+    registerName = inBrackets:sub(0, offsetIndex - 1)
+   else --There's no offset at all.
+    registerName = inBrackets
    end
    
-   print("from-mem: ["..register.."], ["..offset.."]")
-   ret = {type = 9, value = encodeFromMemory(register, offset)} -- FromMem
-  else
+   register = registers[registerName]
+   if not register then
+    print("Line "..lineNum..", Invalid register "..registerName)
+    os.exit(0)
+   end
+   
+   if register2 then
+    register2 = registers[register2]
+    local reg2Sign = inBrackets:sub(offsetIndex, offsetIndex) == "-" and 1 or 0
+    ret = {type = 9, value = encodeFromMemory(register, register2, reg2Sign, offset)} -- FromMem
+   else
+    ret = {type = 9, value = encodeFromMemory(register, nil, nil, offset)} -- FromMem
+   end
+    
+  else --It's not a register, and it's not a FromMem. We'll just treat it as a label.
    local literalValue = tonumber(operand)
    ret = {type = 8, value = literalValue or operand} -- Literal
   end
@@ -183,7 +220,7 @@ local function parseLine(ln)
  if operation then -- Checks to see if there's anything actually on this line.
  
   local opType = operationTypes[operation]
-  if opType then
+  if opType then -- This could be a processor instruction.
    local op1, op2 = symbols[2], symbols[3] -- The operands.
    
    if op1 then
@@ -198,22 +235,25 @@ local function parseLine(ln)
    
    if op1 and op1.value then
     if type(op1.value) == "string" then
-     replaceMarkers[sdPointer] = op1.value
+     replaceLabels[sdPointer] = op1.value
     end
+    
     shortWrite(op1.value)
    end
+   
    if op2 and op2.value then
     if op2.type == 9 then -- FromMem
      print("Line "..lineNum..", second operand cannot be from memory.")
      os.exit(0)
     end
+    
     if type(op2.value) == "string" then
-     replaceMarkers[sdPointer] = op2.value
+     replaceLabels[sdPointer] = op2.value
     end
     shortWrite(op2.value)
    end
    
-  else
+  else -- It's not a processor instruction. Maybe it's an assembler instruction.
    local instruction = assemblerInstructions[operation]
    if instruction then
     if instruction == 0 then -- MARK
@@ -221,7 +261,7 @@ local function parseLine(ln)
       print("Line "..lineNum..", MARK requires a label")
       os.exit(0)
      end
-     markers[symbols[2]] = sdPointer
+     constants[symbols[2]] = sdPointer
      print("Marked "..sdPointer.." as "..symbols[2])
      
     elseif instruction == 1 then -- DATA
@@ -252,10 +292,12 @@ local function parseLine(ln)
       os.exit(0)
      end
      
-     constants[smybols[2]] = value
+     constants[symbols[2]] = value
+     
+     print("Defined constant "..symbols[2].." as "..value)
     end
    else -- No idea what it is. Definitely not valid syntax.
-    print("Line "..lineNum.."unexpected symbol "..operation)
+    print("Line "..lineNum..", unexpected symbol "..operation)
     os.exit(0)
    end
   end
@@ -272,23 +314,23 @@ for ln in inputFile:lines() do
  lineNum = lineNum + 1
 end
 
-for k,v in pairs(replaceMarkers) do
+for k,v in pairs(replaceLabels) do
  if not shortData[k] then
   print("Something has gone horribly, horribly wrong.")
   os.exit(0)
  end
- if not markers[v] then
-  print("Could not find marker "..v)
+ if not constants[v] then
+  print("Could not find constant "..v)
   os.exit(0)
  end
- shortData[k] = markers[v]
- print("Replaced label "..v.." at "..k.." with address "..markers[v])
+ shortData[k] = constants[v]
+ print("Replaced label "..v.." at "..k.." with address "..constants[v])
 end
 
 local outputFile = assert(io.open(outputPath, "wb"))
 
 for i = 0, #shortData do
- print("Writing: "..shortData[i])
+ --print("Writing: "..shortData[i])
  local mSigByte = rshift(shortData[i], 8)
  local lSigByte = band(shortData[i], 0xFF)
  outputFile:write(string.char(mSigByte))
