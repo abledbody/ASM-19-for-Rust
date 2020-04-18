@@ -87,16 +87,22 @@ local sdPointer = 0
 
 --== FUNCTIONS ==--
 
+local function widthFilter(value, width)
+ return band(value, 2 ^ width - 1)
+end
+
 local function shortWrite(value)
+ if type(value) == number then
+  value = widthFilter(value, 16)
+ end
  shortData[sdPointer] = value
- print("Wrote "..value.." at "..sdPointer)
+ --print("Wrote "..value.." at "..sdPointer)
  sdPointer = sdPointer + 1
 end
 
-
 local function encodeOperation(opType, op1, op2)
  if not type(opType) == "number" then
-  print("Line"..lineNum..", encodeOperation: first parameter opType must be number, got "..(opType or "nil"))
+  print("Line "..lineNum..", encodeOperation: first parameter opType must be number, got "..(opType or "nil"))
   os.exit(0)
  end
  
@@ -111,32 +117,34 @@ local function encodeOperation(opType, op1, op2)
  elseif opType <= 35 then --Two operands
   opCode = opType * 90 - 1467 + op1.type + op2.type * 10 --Algebra'd. The original equation is   (opType - 18) * 90 + 153 + op1.type + op2.type * 10
  else
-  print("Line"..lineNum..", invalid operand type "..opType)
+  print("Line "..lineNum..", invalid operand type "..opType)
   os.exit(0)
  end
  
  return opCode
 end
 
-local function encodeFromMemory(register, register2, reg2sign, offset)
+local function encodeFromMemory(register, register2, reg2Sign, offset)
  if register2 then
-  print("I haven't implemented multiple-register FromMem reads, yet.")
-  os.exit(0)
+  register = widthFilter(register, 3)
+  
+  register2 = widthFilter(register2, 3)
+  register2 = lshift(register2, 4)
+  
+  reg2Sign = lshift(reg2Sign, 7)
+  
+  offset = offset or 0
+  offset = widthFilter(offset, 8)
+  offset = lshift(offset, 8)
+  
+  return offset + reg2Sign + register2 + 0x8 + register
  else
-  local operand
+  register = widthFilter(register, 3)
   
-  if offset then
-   if offset < 0 then
-    print("I haven't implemented negative inline FromMem offsets, yet.")
-    os.exit(0)
-   else
-    operand = register + lshift(offset, 4) 
-   end
-  else
-   operand = register
-  end
-  
-  return operand
+  offset = offset or 0
+  offset = widthFilter(offset, 12)
+  offset = lshift(offset, 4)
+  return offset + register
  end
 end
 
@@ -162,7 +170,7 @@ local function parseOperand(operand)
     offset = tonumber(inBrackets:sub(offsetIndex))
     
     if not offset then --Likely a second register
-     offsetIndex2 = inBrackets:find("[%+%-]", offsetIndex);
+     offsetIndex2 = inBrackets:find("[%+%-]", offsetIndex + 1);
      register2 = inBrackets:sub(offsetIndex + 1, offsetIndex2 - 1);
      offset = tonumber(inBrackets:sub(offsetIndex2))
      
@@ -186,8 +194,17 @@ local function parseOperand(operand)
    if register2 then
     register2 = registers[register2]
     local reg2Sign = inBrackets:sub(offsetIndex, offsetIndex) == "-" and 1 or 0
+    
+    if offset > 127 or offset < -128 then
+     print("Line "..lineNum..", Multiple-register offset out of range (-128..127), "..offset)
+     os.exit(0)
+    end
     ret = {type = 9, value = encodeFromMemory(register, register2, reg2Sign, offset)} -- FromMem
    else
+    if offset > 2047 or offset < -2048 then
+     print("Line "..lineNum..", Single-register offset out of range (-2048..2047), "..offset)
+     os.exit(0)
+    end
     ret = {type = 9, value = encodeFromMemory(register, nil, nil, offset)} -- FromMem
    end
     
@@ -270,7 +287,13 @@ local function parseLine(ln)
      end
      
      for i = 2, #symbols do
-      shortWrite(symbols[i])
+      local value = tonumber(symbols[i])
+      if not value then
+       replaceLabels[sdPointer] = symbols[i]
+      end
+      
+      
+      shortWrite(value)
      end
      
     elseif instruction == 2 then -- DSTR
@@ -289,6 +312,10 @@ local function parseLine(ln)
      
      if not value then
       print("Line "..lineNum..", expected number, got "..symbols[3])
+      os.exit(0)
+     end
+     if value > 0xFFFF then
+      print("Line "..lineNum..", short cannot be greater than 0xFFFF, got "..symbols[3])
       os.exit(0)
      end
      
@@ -324,15 +351,16 @@ for k,v in pairs(replaceLabels) do
   os.exit(0)
  end
  shortData[k] = constants[v]
- print("Replaced label "..v.." at "..k.." with address "..constants[v])
+ print("Replaced label "..v.." at "..k.." with constant "..constants[v])
 end
 
 local outputFile = assert(io.open(outputPath, "wb"))
 
 for i = 0, #shortData do
  --print("Writing: "..shortData[i])
- local mSigByte = rshift(shortData[i], 8)
- local lSigByte = band(shortData[i], 0xFF)
+ local mSigByte = widthFilter(rshift(shortData[i], 8), 8)
+ local lSigByte = widthFilter(shortData[i], 8)
+ print(mSigByte, lSigByte)
  outputFile:write(string.char(mSigByte))
  outputFile:write(string.char(lSigByte))
 end
