@@ -82,7 +82,7 @@ local replaceLabels = {}
 local constants = {}
 local shortData = {}
 
-local lineNum = 0
+local lineNum = 1
 local sdPointer = 0
 
 --== FUNCTIONS ==--
@@ -126,24 +126,25 @@ end
 
 local function encodeFromMemory(register, register2, reg2Sign, offset)
  if register2 then
-  register = widthFilter(register, 3)
+  register = widthFilter(register, 3) -- 0000,0000,0000,0111
   
-  register2 = widthFilter(register2, 3)
+  register2 = widthFilter(register2, 3) -- 0000,0000,0111,0000
   register2 = lshift(register2, 4)
   
-  reg2Sign = lshift(reg2Sign, 7)
+  reg2Sign = lshift(reg2Sign, 7) -- 0000,0000,1000,0000
   
   offset = offset or 0
   offset = widthFilter(offset, 8)
-  offset = lshift(offset, 8)
+  offset = lshift(offset, 8) -- 1111,1111,0000,0000
   
   return offset + reg2Sign + register2 + 0x8 + register
  else
-  register = widthFilter(register, 3)
+  register = widthFilter(register, 3) -- 0000,0000,0000,0111
   
   offset = offset or 0
   offset = widthFilter(offset, 12)
-  offset = lshift(offset, 4)
+  offset = lshift(offset, 4) -- 1111,1111,1111,0000
+  
   return offset + register
  end
 end
@@ -170,9 +171,16 @@ local function parseOperand(operand)
     offset = tonumber(inBrackets:sub(offsetIndex))
     
     if not offset then --Likely a second register
-     offsetIndex2 = inBrackets:find("[%+%-]", offsetIndex + 1);
-     register2 = inBrackets:sub(offsetIndex + 1, offsetIndex2 - 1);
-     offset = tonumber(inBrackets:sub(offsetIndex2))
+     offsetIndex2 = inBrackets:find("[%+%-]", offsetIndex + 1)
+     if offsetIndex2 then
+      offset = tonumber(inBrackets:sub(offsetIndex2))
+      register2 = inBrackets:sub(offsetIndex + 1, offsetIndex2 - 1)
+     else
+      offset = 0
+      register2 = inBrackets:sub(offsetIndex + 1)
+     end
+     
+     
      
      if not offset then
       print("Line "..lineNum..", Unknown from-memory configuration: "..inBrackets)
@@ -195,13 +203,13 @@ local function parseOperand(operand)
     register2 = registers[register2]
     local reg2Sign = inBrackets:sub(offsetIndex, offsetIndex) == "-" and 1 or 0
     
-    if offset > 127 or offset < -128 then
+    if offset and (offset > 127 or offset < -128) then
      print("Line "..lineNum..", Multiple-register offset out of range (-128..127), "..offset)
      os.exit(0)
     end
     ret = {type = 9, value = encodeFromMemory(register, register2, reg2Sign, offset)} -- FromMem
    else
-    if offset > 2047 or offset < -2048 then
+    if offset and (offset > 2047 or offset < -2048) then
      print("Line "..lineNum..", Single-register offset out of range (-2048..2047), "..offset)
      os.exit(0)
     end
@@ -297,7 +305,30 @@ local function parseLine(ln)
      end
      
     elseif instruction == 2 then -- DSTR
-    
+     local stringStart = ln:find("\"")
+     if not stringStart then
+      print("Line "..lineNum..", could not find start of string.")
+      os.exit(0)
+     end
+     local i = stringStart + 1
+     while true do
+      local character = ln:match(".", i)
+      
+      if not character then
+       print("Line "..lineNum..", Invalid string syntax "..ln)
+       os.exit(0)
+       break
+      end
+      
+      if character == "\"" then
+       break
+      end
+      
+      shortWrite(string.byte(character))
+      
+      i = i+1
+     end
+     
     elseif instruction == 3 then -- CONST
      if not symbols[2] then
       print("Line "..lineNum..", CONST requires a label")
