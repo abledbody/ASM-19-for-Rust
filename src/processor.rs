@@ -172,13 +172,22 @@ impl Processor {
 	}
 
 	fn from_mem_decode(data: u16) -> FromMemType {
-		let two_registers = data &	0b1000;				// 0000,0000,0000,1000
+		let two_registers = data &	0b1000;						// 0000,0000,0000,1000
 
 		if two_registers == 0 {
-			let register = data &	0b111;				// 0000,0000,0000,0111
-			let offset = data >> 4 & 0b111111111111 ;	// 1111,1111,1111,0000
+			let register = data &	0b111;						// 0000,0000,0000,0111
+			let offset = data >> 4 & 0b111111111111;			// 1111,1111,1111,0000
+			let negativeOffset = offset & 0b100000000000 > 0;	// 1000,0000,0000,0000
 
-			println!("Decoding from_mem, got offset of {}", offset as i16);
+			let offset: i16 = if negativeOffset {
+				// offset is a 12 bit number. Rust can't handle the signage of this number, so we're going to convert whatever it is into an i16.
+				(0b1111000000000000 | offset) as i16
+			}
+			else {
+				offset as i16
+			};
+
+			println!("Decoding from_mem, got offset of {}", offset);
 
 			match Processor::register_type(register) {
 				Some(reg) => FromMemType::Single(reg, offset as i16),
@@ -186,10 +195,13 @@ impl Processor {
 			}
 		}
 		else{
-			let register_a = data &	0b111;			// 0000,0000,0000,0111
-			let register_b = data >> 4 & 0b111;		// 0000,0000,0111,0000
-			let subtract = data & 	0b10000000 > 0;	// 0000,0000,1000,0000
-			let offset = data >> 8 & 0b11111111 ;	// 1111,1111,0000,0000
+			let register_a = data &	0b111;				// 0000,0000,0000,0111
+			let register_b = data >> 4 & 0b111;			// 0000,0000,0111,0000
+			let subtract = data & 	0b10000000 > 0;		// 0000,0000,1000,0000
+			let offset = (data >> 8 & 0b11111111) as i8;// 1111,1111,0000,0000
+
+			
+			println!("Decoding from_mem, got offset of {}", offset);
 
 			let register_a = match Processor::register_type(register_a) {
 				Some(reg) => reg,
@@ -206,43 +218,24 @@ impl Processor {
 		
 	}
 
-	fn from_mem_write(&mut self, data: u16, value: u16) {
+	fn from_mem_get_address(&self, data: u16) -> u16 {
 		let from_mem_type = Processor::from_mem_decode(data);
 
-		match from_mem_type {
+		let address = match from_mem_type {
 			FromMemType::Single(reg, offset) => {
-				let write_address = self.cpu_read(reg, false) as isize + offset as isize;
-				
-
-				self.write_mem(write_address as u16, value);
+				self.cpu_read(reg, false) + offset as u16
 			},
 			FromMemType::Double(reg_a, reg_b, offset, subtract) => {
-				let reg_b_signed = self.cpu_read(reg_b, false) as isize * if subtract {-1} else {1};
-				let write_address = self.cpu_read(reg_a, false) as isize + reg_b_signed + offset as isize;
-				
-				
-				self.write_mem(write_address as u16, value);
+				let reg_b = self.cpu_read(reg_b, false);
+				let reg_a = self.cpu_read(reg_a, false);
+				let reg_b_signed = if subtract {-(reg_b as i16)} else {reg_b as i16};
+				reg_a + reg_b_signed as u16 + offset as u16
 			}
-		}
-	}
+		};
 
-	fn from_mem_read(&self, data: u16) -> u16 {
-		let from_mem_type = Processor::from_mem_decode(data);
+		println!("Calculated FromMem address of {}", address);
 
-		match from_mem_type {
-			FromMemType::Single(reg, offset) => {
-				let read_address = self.cpu_read(reg, false) as isize + offset as isize;
-				
-				self.read_mem(read_address as u16)
-			},
-			FromMemType::Double(reg_a, reg_b, offset, subtract) => {
-				let reg_b_signed = self.cpu_read(reg_b, false) as isize * if subtract {-1} else {1};
-				let read_address = self.cpu_read(reg_a, false) as isize + reg_b_signed + offset as isize;
-				
-				
-				self.read_mem(read_address as u16)
-			}
-		}
+		address
 	}
 
 	// The op_write and op_read functions are here so that you don't have to think about where you're reading/writing to in the operation functions,
@@ -258,7 +251,10 @@ impl Processor {
 			OperandType::RegPP				=> { self.reg_pp	= value; }
 			OperandType::RegFL				=> { self.reg_fl	= value; }
 			OperandType::Literal(address)	=> { self.write_mem(address, value); }
-			OperandType::FromMem(data)		=> { self.from_mem_write(data, value); }
+			OperandType::FromMem(data)		=> { 
+				let write_address = self.from_mem_get_address(data);
+				self.write_mem(write_address, value);
+			}
 		}
 	}
 
@@ -273,7 +269,10 @@ impl Processor {
 			OperandType::RegPP				=> { self.reg_pp	}
 			OperandType::RegFL				=> { self.reg_fl	}
 			OperandType::Literal(value)		=> { if source {value} else {self.read_mem(value)} }
-			OperandType::FromMem(data)		=> { self.from_mem_read(data) }
+			OperandType::FromMem(data)		=> {
+				let read_address = self.from_mem_get_address(data);
+				self.read_mem(read_address)
+			}
 		}
 	}
 
