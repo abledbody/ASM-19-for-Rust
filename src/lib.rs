@@ -26,8 +26,8 @@ pub struct Computer {
 }
 
 impl Computer {
-	pub fn new() -> Computer {
-		let cpu = processor::Processor::new();
+	pub fn new(log: bool) -> Computer {
+		let cpu = processor::Processor::new(log);
 		let ram = cpu.ram.clone();
 
 		Computer {
