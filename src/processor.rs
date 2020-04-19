@@ -10,17 +10,19 @@ enum OperandType {
 	RegA,
 	RegB,
 	RegC,
-	RegT,
-	RegSP,
-	RegVP,
-	RegPP,
-	RegFL,
+	RegT, // This is where comparisons go
+	RegSP, // F-stack pointer
+	RegVP, // V-stack pointer
+	RegPP, // Program pointer
+	RegFL, // Flags
 	Literal(u16),
 	FromMem(u16),
 }
 
 impl fmt::Display for OperandType {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		// We'll leave the operation loggers to actually explain what is contained in these operands,
+		// displaying an OperandType will just tell you what kind it is, and if it's a FromMem, the enclosed FromMem data.
 		match self {
 			OperandType::RegA =>	write!(f, "A"),
 			OperandType::RegB =>	write!(f, "B"),
@@ -55,10 +57,11 @@ type NoOpFunc = fn(&mut Processor) -> u16;
 type OneOpFunc = fn(&mut Processor, OperandType, u16) -> u16;
 type TwoOpFunc = fn(&mut Processor, OperandType, OperandType, u16) -> u16;
 
+#[derive(Copy, Clone)]
 enum Instruction {
 	NoOperand(NoOpFunc),
-	OneOperand(OneOpFunc, OperandType),
-	TwoOperand(TwoOpFunc, OperandType, OperandType),
+	OneOperand(OneOpFunc, OperandType, usize),
+	TwoOperand(TwoOpFunc, OperandType, OperandType, usize),
 }
 
 pub struct Processor {
@@ -71,6 +74,7 @@ pub struct Processor {
 	reg_vp: u16,
 	reg_pp: u16,
 	reg_fl: u16,
+	machine_extension: u16,
 	pub ram: Rc<RefCell<memory::Memory>>,
 	pub log: bool
 }
@@ -87,6 +91,7 @@ impl Processor {
 			reg_vp: 0,
 			reg_pp: 0,
 			reg_fl: 0,
+			machine_extension: 0,
 			ram: Rc::new(RefCell::new(memory::Memory::new())),
 			log,
 		}
@@ -99,8 +104,7 @@ impl Processor {
 			if self.log {
 				self.print_register_state();
 			}
-			self.execute(instruction);
-			
+			self.reg_pp += self.execute(instruction);
 		}
 	}
 
@@ -108,7 +112,25 @@ impl Processor {
 		println!("	A: {:04X}	B: {:04X}	C: {:04X}	T: {:04X}	SP: {:04X}	VP:	{:04X}	PP: {:04X}	FL:	{:04X}", self.reg_a, self.reg_b, self.reg_c, self.reg_t, self.reg_sp, self.reg_vp, self.reg_pp, self.reg_fl);
 	}
 
-	fn count_operands(operands: Vec<OperandType>) -> u16 {
+	// These wrappers handle errors when working with memory.
+	fn read_mem(&self, address: u16) -> u16 {
+		let ram = self.ram.try_borrow().unwrap();
+		match ram.read(address) {
+			Ok(value) => value,
+			Err(error) => {println!("{}, defaulting to 0", error.message); 0},
+		}
+	}
+
+	fn write_mem(&self, address: u16, value: u16) {
+		let ram = self.ram.try_borrow_mut().unwrap();
+		match ram.write(address, value) {
+			Ok(value) => value,
+			Err(error) => {println!("{}", error.message);},
+		}
+	}
+
+	// Returns how many bytes after an instruction are dedicated to operands.
+	fn count_operands(operands: Vec<OperandType>) -> usize {
 		let mut op_count = 0;
 		for op in operands.iter() {
 			op_count += match op {
@@ -121,13 +143,52 @@ impl Processor {
 		op_count
 	}
 
+	fn register_type(value: u16) -> Option<OperandType> {
+		match value {
+			0 => { Some(OperandType::RegA) }
+			1 => { Some(OperandType::RegB) }
+			2 => { Some(OperandType::RegC) }
+			3 => { Some(OperandType::RegT) }
+			4 => { Some(OperandType::RegSP) }
+			5 => { Some(OperandType::RegVP) }
+			6 => { Some(OperandType::RegPP) }
+			7 => { Some(OperandType::RegFL) }
+			_ => { None }
+		}
+	}
+
+	// Converts an operator offset into an OperandType.
+	fn get_operand_type(&self, op_offset: u16, operand_address: u16) -> OperandType {
+		let register = Processor::register_type(op_offset);
+
+		match register {
+			Some(reg) => reg,
+			None => match op_offset {
+				8 => {
+					let next_short = self.read_mem(operand_address);
+					OperandType::Literal(next_short)
+				}
+				9 => {
+					let next_short = self.read_mem(operand_address);
+					OperandType::FromMem(next_short)
+				}
+				_ => { panic!("Invalid operand offset: {}", op_offset); }
+			}
+		}
+	}
+
+	// This is where we read the program pointer register and make a computer-parsable instruction out of the opcode and its neighboring operands.
 	fn build_instruction(&self) -> Instruction {
 		let reg_pp = self.reg_pp;
 		let opcode = self.read_mem(reg_pp);
+
+		// We're going to need to know ahead of time how many operands our instruction has so that we can pick the right variant
+		// and specify which kind of function we'll be using.
 		let op_count = match opcode {
 			0x0000..=0x0002 => 0,
 			0x0003..=0x0098 => 1,
 			0x0099..=0x06EC => 2,
+			// We treat every invalid opcode as HALT, which is a 0 operand operation.
 			_ => 0,
 		};
 
@@ -137,7 +198,10 @@ impl Processor {
 					0x0000	=>	Processor::op_HALT	as NoOpFunc,
 					0x0001	=>	Processor::op_NOP	as NoOpFunc,
 					0x0002	=>	Processor::op_RET	as NoOpFunc,
-					_ => panic!("Impossible state"),
+					_ => {
+						println!("Encounted invalid opcode {}", opcode);
+						Processor::op_HALT as NoOpFunc
+					},
 				};
 				Instruction::NoOperand(op_func)
 			}
@@ -160,9 +224,9 @@ impl Processor {
 					0x008F..=0x0098	=>	(Processor::op_EXTI		as OneOpFunc, 0x008F),
 					_ => panic!("Impossible state"),
 				};
-				let operand_1 = self.instruction_type(opcode - base_opcode, reg_pp + 1);
+				let operand_1 = self.get_operand_type(opcode - base_opcode, reg_pp + 1);
 
-				Instruction::OneOperand(op_func, operand_1)
+				Instruction::OneOperand(op_func, operand_1, Processor::count_operands(vec![operand_1]))
 			}
 			2 => {
 				let (op_func, base_opcode) = match opcode {
@@ -187,133 +251,81 @@ impl Processor {
 					_ => panic!("Impossible state"),
 				};
 
-				let (operand_1, operand_2) = self.instructions_two_operands(opcode - base_opcode);
+				let op_offset = opcode - base_opcode;
+				let operand_1 = self.get_operand_type(op_offset % 10, reg_pp + 1);
 
-				Instruction::TwoOperand(op_func, operand_1, operand_2)
+				// If the first operand has attached data we need to look at the next byte over for our second operand.
+				let operand_2_address = match operand_1 {
+					OperandType::FromMem(_) => reg_pp + 2,
+					OperandType::Literal(_) => reg_pp + 2,
+					_ => reg_pp + 1,
+				};
+				let operand_2 = self.get_operand_type(op_offset / 10, operand_2_address);
+
+				Instruction::TwoOperand(op_func, operand_1, operand_2, Processor::count_operands(vec![operand_1, operand_2]))
 			}
 			_ => panic!("Impossible state"),
 		}
 	}
 
-	// Finds the right function based on the opcode range and returns the program pointer increment
-	fn execute(&mut self, instruction: Instruction) {
-		self.reg_pp += match instruction {
+	fn execute(&mut self, instruction: Instruction) -> u16 {
+		match instruction {
 			Instruction::NoOperand(func) => func(self),
-			Instruction::OneOperand(func, operand_1) => {
-				let op_count = Processor::count_operands(vec![operand_1]);
-
-				func(self, operand_1, op_count)
+			Instruction::OneOperand(func, operand_1, op_count) => {
+				func(self, operand_1, op_count as u16)
 			},
-			Instruction::TwoOperand(func, operand_1, operand_2) => {
-				let op_count = Processor::count_operands(vec![operand_1, operand_2]);
-
-				func(self, operand_1, operand_2, op_count)
+			Instruction::TwoOperand(func, operand_1, operand_2, op_count) => {
+				func(self, operand_1, operand_2, op_count as u16)
 			}
 		}
 	}
-
-	// A small wrapper that handles errors when reading memory.
-	fn read_mem(&self, address: u16) -> u16 {
-		let ram = self.ram.try_borrow().unwrap();
-		match ram.read(address) {
-			Ok(value) => value,
-			Err(error) => {println!("{}, defaulting to 0", error.message); 0},
-		}
-	}
-
-	fn write_mem(&self, address: u16, value: u16) {
-		let ram = self.ram.try_borrow_mut().unwrap();
-		match ram.write(address, value) {
-			Ok(value) => value,
-			Err(error) => {println!("{}", error.message);},
-		}
-	}
-
-	fn register_type(value: u16) -> Option<OperandType> {
-		match value {
-			0 => { Some(OperandType::RegA) }
-			1 => { Some(OperandType::RegB) }
-			2 => { Some(OperandType::RegC) }
-			3 => { Some(OperandType::RegT) }
-			4 => { Some(OperandType::RegSP) }
-			5 => { Some(OperandType::RegVP) }
-			6 => { Some(OperandType::RegPP) }
-			7 => { Some(OperandType::RegFL) }
-			_ => { None }
-		}
-	}
-
-	// Converts an operator offset into an Operand enum.
-	fn instruction_type(&self, op_offset: u16, operand_address: u16) -> OperandType {
-		let register = Processor::register_type(op_offset);
-
-		match register {
-			Some(reg) => reg,
-			None => match op_offset {
-				8 => {
-					let next_short = self.read_mem(operand_address);
-					OperandType::Literal(next_short)
-				}
-				9 => {
-					let next_short = self.read_mem(operand_address);
-					OperandType::FromMem(next_short)
-				}
-				_ => { panic!("Invalid operand offset: {}", op_offset); }
-			}
-		}
-	}
-
-	// Does the prerequisite math for multiple operand operations and returns a tuple with both Operand enums.
-	fn instructions_two_operands(&self, op_offset: u16) -> (OperandType, OperandType) {
-		let type_one = self.instruction_type(op_offset % 10, self.reg_pp + 1);
-		let operand_2_address = match type_one {
-			OperandType::FromMem(_) => self.reg_pp + 2,
-			OperandType::Literal(_) => self.reg_pp + 2,
-			_ => self.reg_pp + 1,
-		};
-		let type_two = self.instruction_type(op_offset / 10, operand_2_address);
-
-		(type_one, type_two)
-	}
-
+	
 	fn from_mem_decode(data: u16) -> FromMemType {
-		let two_registers = data &	0b1000;						// 0000,0000,0000,1000
+		// These visual guides show which bits of the original short these variables refer to.
+		let one_register = data & 0b1000 == 0;					// 0000,0000,0000,1000
 
-		if two_registers == 0 {
-			let register = data &	0b111;						// 0000,0000,0000,0111
+		if one_register {
+			let register = data & 0b111;						// 0000,0000,0000,0111
 			let offset = data >> 4 & 0b111111111111;			// 1111,1111,1111,0000
-			let negativeOffset = offset & 0b100000000000 > 0;	// 1000,0000,0000,0000
+			let negative_offset = offset & 0b100000000000 > 0;	// 1000,0000,0000,0000
 
-			let offset: i16 = if negativeOffset {
-				// offset is a 12 bit number. Rust can't handle the signage of this number, so we're going to convert whatever it is into an i16.
+			// offset is a 12 bit number. Rust can't handle the signage of this number,
+			// so we're going to convert whatever it is into an i16 manually.
+			let offset: i16 = if negative_offset {
+				// We know this is a negative number that's equal to or above -(2^6),
+				// so we can simply stick in the extra 1s to convert it into an i16.
 				(0b1111000000000000 | offset) as i16
 			}
 			else {
+				// The extra 4 bits were already 0 when we created this short, so
+				// since it's positive we don't need to do anything special.
 				offset as i16
 			};
 
-			match Processor::register_type(register) {
-				Some(reg) => FromMemType::Single(reg, offset as i16),
+			let register = match Processor::register_type(register) {
+				Some(reg) => reg,
 				None => panic!("Impossible state"),
-			}
+			};
+
+			FromMemType::Single(register, offset as i16)
 		}
-		else{
-			let register_a = data &	0b111;				// 0000,0000,0000,0111
-			let register_b = data >> 4 & 0b111;			// 0000,0000,0111,0000
+		else {
+			let register_1 = data &	0b111;				// 0000,0000,0000,0111
+			let register_2 = data >> 4 & 0b111;			// 0000,0000,0111,0000
 			let subtract = data & 	0b10000000 > 0;		// 0000,0000,1000,0000
 			let offset = (data >> 8 & 0b11111111) as i8;// 1111,1111,0000,0000
 
-			let register_a = match Processor::register_type(register_a) {
+			let register_1 = match Processor::register_type(register_1) {
 				Some(reg) => reg,
 				None => panic!("Impossible state"),
 			};
 
-			let register_b = match Processor::register_type(register_b) {
+			let register_2 = match Processor::register_type(register_2) {
 				Some(reg) => reg,
 				None => panic!("Impossible state"),
 			};
 
-			FromMemType::Double(register_a, register_b, offset as i16, subtract)
+			FromMemType::Double(register_1, register_2, offset as i16, subtract)
 		}
 		
 	}
@@ -336,8 +348,8 @@ impl Processor {
 		address
 	}
 
-	// The op_write and op_read functions are here so that you don't have to think about where you're reading/writing to in the operation functions,
-	// it's just handled by the operation offset.
+	// Since each OperandType has a different place to write to and way of handling it, the
+	// cpu_write and cpu_read functions act as the go-between for finding the right address/register.
 	fn cpu_write(&mut self, operand: OperandType, value: u16) {
 		match operand {
 			OperandType::RegA				=> { self.reg_a		= value; }
@@ -397,7 +409,6 @@ impl Processor {
 		0
 	}
 
-	// VERIFY ME
 	fn op_NEG(&mut self, operand_1: OperandType, op_count: u16) -> u16 {
 		let value_1 = self.cpu_read(operand_1, false) as i16;
 		self.cpu_write(operand_1, (-value_1) as u16);
@@ -463,9 +474,8 @@ impl Processor {
 		if self.log {println!("CALL	{}({:04X} pushing {:04X})", operand_1, self.reg_pp, return_dest);}
 		0
 	}
-
-	#[allow(unused_variables)]
-	fn op_JMP(&mut self, operand_1: OperandType, op_count: u16) -> u16 {
+	
+	fn op_JMP(&mut self, operand_1: OperandType, _op_count: u16) -> u16 {
 		self.reg_pp = self.cpu_read(operand_1, true);
 
 		if self.log {println!("JMP	{}({:04X})", operand_1, self.reg_pp);}
@@ -567,12 +577,12 @@ impl Processor {
 		}
 	}
 
-	// VERIFY ME
-	#[allow(unused_variables)]
 	fn op_EXTI(&mut self, operand_1: OperandType, op_count: u16) -> u16 {
-		println!("Attempted to use operation EXTI at {:04X}, which is not implemented.", self.reg_pp);
-		
-		1
+		let value_1 = self.cpu_read(operand_1, true);
+		self.machine_extension = value_1;
+
+		if self.log {println!("EXTI	{}({:04X})", operand_1, value_1);}
+		op_count + 1
 	}
 
 	fn op_ADD(&mut self, operand_1: OperandType, operand_2: OperandType, op_count: u16) -> u16 {

@@ -391,7 +391,7 @@ for i = 0, #shortData do
  --print("Writing: "..shortData[i])
  local mSigByte = widthFilter(rshift(shortData[i], 8), 8)
  local lSigByte = widthFilter(shortData[i], 8)
- print(mSigByte, lSigByte)
+ --print(mSigByte, lSigByte)
  outputFile:write(string.char(mSigByte))
  outputFile:write(string.char(lSigByte))
 end
