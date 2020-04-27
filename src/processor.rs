@@ -758,7 +758,7 @@ impl Processor {
 		let value_1 = self.cpu_read(operand_1, false) as i16;
 		let value_2 = self.cpu_read(operand_2, true) as i16;
 
-		self.reg_t = (value_2 - value_1) as u16;
+		self.reg_t = (value_1 - value_2) as u16;
 
 		if self.log {println!("CMP	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		op_count + 1
