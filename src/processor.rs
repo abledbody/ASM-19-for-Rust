@@ -75,12 +75,12 @@ pub struct Processor {
 	reg_pp: u16,
 	reg_fl: u16,
 	machine_extension: u16,
-	pub ram: Rc<RefCell<memory::Memory>>,
+	pub ram: Rc<RefCell<dyn memory::Memory>>,
 	pub log: bool
 }
 
 impl Processor {
-	pub fn new(log: bool) -> Processor {
+	pub fn new(ram: Rc<RefCell<dyn memory::Memory>>, log: bool) -> Processor {
 		Processor {
 			halted: false,
 			reg_a: 0,
@@ -92,7 +92,7 @@ impl Processor {
 			reg_pp: 0,
 			reg_fl: 0,
 			machine_extension: 0,
-			ram: Rc::new(RefCell::new(memory::Memory::new())),
+			ram: ram,
 			log,
 		}
 	}
