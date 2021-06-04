@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["asm_19"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"struct\" href=\"asm_19/processor/struct.Processor.html\" title=\"struct asm_19::processor::Processor\">Processor</a>","synthetic":false,"types":["asm_19::processor::Processor"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
