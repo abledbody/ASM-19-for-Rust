@@ -22,9 +22,9 @@ pub struct Processor {
 	machine_extension: u16,
 }
 
-type NoOpFunc = fn(&mut Processor, &mut Box<dyn memory::Memory>, bool) -> u16;
-type OneOpFunc = fn(&mut Processor, &mut Box<dyn memory::Memory>, OperandTarget, u16, bool) -> u16;
-type TwoOpFunc = fn(&mut Processor, &mut Box<dyn memory::Memory>, OperandTarget, OperandTarget, u16, bool) -> u16;
+type NoOpFunc = fn(&mut Processor, &mut dyn memory::Memory, bool) -> u16;
+type OneOpFunc = fn(&mut Processor, &mut dyn memory::Memory, OperandTarget, u16, bool) -> u16;
+type TwoOpFunc = fn(&mut Processor, &mut dyn memory::Memory, OperandTarget, OperandTarget, u16, bool) -> u16;
 
 #[derive(Copy, Clone)]
 enum Instruction {
@@ -60,7 +60,7 @@ impl Processor {
 	// ASM-19's fetch/decode/execute cycle is done in one clock, which can be triggered from the tick function.
 	/// Causes the CPU to execute the instruction in memory at the address in the Program Pointer register.
 	/// Has an option for logging to the terminal, which will slow the CPU down considerably, so it should only be used when stepping through the instructions one at a time.
-	pub fn tick(&mut self, ram: &mut Box<dyn memory::Memory>, log: bool) {
+	pub fn tick(&mut self, ram: &mut dyn memory::Memory, log: bool) {
 		if !self.halted {
 			let instruction = self.build_instruction(ram);
 			if log {
@@ -74,7 +74,7 @@ impl Processor {
 	// such as if a RAM module is smaller than 64 Kb.
 	
 	// Defaults to reading zero
-	fn read_mem(ram: &Box<dyn memory::Memory>, address: u16) -> u16 {
+	fn read_mem(ram: &dyn memory::Memory, address: u16) -> u16 {
 		match ram.read(address) {
 			Ok(value) => value,
 			Err(_) => 0,
@@ -82,14 +82,14 @@ impl Processor {
 	}
 	
 	// Defaults to not writing at all
-	fn write_mem(ram: &mut Box<dyn memory::Memory>, address: u16, value: u16) {
+	fn write_mem(ram: &mut dyn memory::Memory, address: u16, value: u16) {
 		match ram.write(address, value) {
 			_ => (),
 		}
 	}
 
 	// This is where we read the program pointer register and make a computer-parsable instruction out of the opcode and its neighboring operands.
-	fn build_instruction(&self, ram: &Box<dyn memory::Memory>) -> Instruction {
+	fn build_instruction(&self, ram: &dyn memory::Memory) -> Instruction {
 		let reg_pp = self.reg_pp;
 		let opcode = Processor::read_mem(ram, self.reg_pp);
 
@@ -192,7 +192,7 @@ impl Processor {
 		}
 	}
 
-	fn execute(&mut self, ram: &mut Box<dyn memory::Memory>, instruction: Instruction, log: bool) -> u16 {
+	fn execute(&mut self, ram: &mut dyn memory::Memory, instruction: Instruction, log: bool) -> u16 {
 		match instruction {
 			Instruction::NoOperand(func) => func(self, ram, log),
 			Instruction::OneOperand(func, operand_1, operand_count) => {
@@ -206,7 +206,7 @@ impl Processor {
 
 	// Since each type of OperandTarget has a different place to write to and way of handling it, the
 	// target_write and target_read functions act as the go-between for finding the right address/register.
-	pub (crate) fn target_write(&mut self, ram: &mut Box<dyn memory::Memory>, operandTarget: OperandTarget, value: u16) {
+	pub (crate) fn target_write(&mut self, ram: &mut dyn memory::Memory, operandTarget: OperandTarget, value: u16) {
 		match operandTarget {
 			OperandTarget::RegA					=> { self.reg_a		= value; }
 			OperandTarget::RegB					=> { self.reg_b		= value; }
@@ -224,7 +224,7 @@ impl Processor {
 		}
 	}
 
-	pub (crate) fn target_read(&self, ram: &Box<dyn memory::Memory>, operand: OperandTarget, source: bool) -> u16 {
+	pub (crate) fn target_read(&self, ram: &dyn memory::Memory, operand: OperandTarget, source: bool) -> u16 {
 		match operand {
 			OperandTarget::RegA				=> { self.reg_a		}
 			OperandTarget::RegB				=> { self.reg_b		}

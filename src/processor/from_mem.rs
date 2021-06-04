@@ -71,7 +71,7 @@ impl FromMemType {
 }
 
 // Turns an operand in a FromMem based instruction into a concrete address.
-pub (super) fn operand_to_address(cpu: &Processor, data: u16, ram: &Box<dyn Memory>) -> u16 {
+pub (super) fn operand_to_address(cpu: &Processor, data: u16, ram: &dyn Memory) -> u16 {
 	let from_mem_type = FromMemType::create_from_operand(data);
 
 	let address = match from_mem_type {

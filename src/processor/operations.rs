@@ -2,19 +2,19 @@ use crate::processor::{OperandTarget, Processor};
 use crate::memory::Memory;
 
 impl Processor {
-	pub (super) fn op_HALT(&mut self, _ram: &mut Box<dyn Memory>, log: bool) -> u16 {
+	pub (super) fn op_HALT(&mut self, _ram: &mut dyn Memory, log: bool) -> u16 {
 		self.halted = true;
 		
 		if log {println!("HALT");}
 		1
 	}
 
-	pub (super) fn op_NOP(&mut self, _ram: &mut Box<dyn Memory>, log: bool) -> u16 {
+	pub (super) fn op_NOP(&mut self, _ram: &mut dyn Memory, log: bool) -> u16 {
 		if log {println!("NOP");}
 		1
 	}
 
-	pub (super) fn op_RET(&mut self, ram: &mut Box<dyn Memory>, log: bool) -> u16 {
+	pub (super) fn op_RET(&mut self, ram: &mut dyn Memory, log: bool) -> u16 {
 		self.reg_sp -= 1;
 		self.reg_pp = Processor::read_mem(ram, self.reg_sp);
 
@@ -22,7 +22,7 @@ impl Processor {
 		0
 	}
 
-	pub (super) fn op_NEG(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_NEG(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false) as i16;
 		self.target_write(ram, operand_1, (-value_1) as u16);
 
@@ -30,7 +30,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_NOT(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_NOT(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 
 		self.target_write(ram, operand_1, !value_1);
@@ -39,7 +39,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_PUSH(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_PUSH(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		Processor::write_mem(ram, self.reg_sp, value_1);
@@ -49,7 +49,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_POP(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_POP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		self.reg_sp -= 1;
 		let value_1 = Processor::read_mem(ram, self.reg_sp);
 		self.target_write(ram, operand_1, value_1);
@@ -58,7 +58,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_VPUSH(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_VPUSH(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		Processor::write_mem(ram, self.reg_vp, value_1);
@@ -68,7 +68,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_VPOP(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_VPOP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		self.reg_vp -= 1;
 		let value_1 = Processor::read_mem(ram, self.reg_vp);
 		self.target_write(ram, operand_1, value_1);
@@ -77,7 +77,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_CALL(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_CALL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let return_dest = self.reg_pp + operand_count + 1;
 
 		Processor::write_mem(ram, self.reg_sp, return_dest);
@@ -88,14 +88,14 @@ impl Processor {
 		0
 	}
 	
-	pub (super) fn op_JMP(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, _operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_JMP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, _operand_count: u16, log: bool) -> u16 {
 		self.reg_pp = self.target_read(ram, operand_1, true);
 
 		if log {println!("JMP	{}({:04X})", operand_1, self.reg_pp);}
 		0
 	}
 
-	pub (super) fn op_JG(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_JG(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let comparison = self.reg_t as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
@@ -111,7 +111,7 @@ impl Processor {
 		}
 	}
 
-	pub (super) fn op_JNG(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_JNG(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let comparison = self.reg_t as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
@@ -126,7 +126,7 @@ impl Processor {
 		}
 	}
 
-	pub (super) fn op_JL(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_JL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let comparison = self.reg_t as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
@@ -142,7 +142,7 @@ impl Processor {
 		}
 	}
 
-	pub (super) fn op_JNL(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_JNL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let comparison = self.reg_t as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
@@ -158,7 +158,7 @@ impl Processor {
 		}
 	}
 
-	pub (super) fn op_JE(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_JE(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let comparison = self.reg_t as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
@@ -174,7 +174,7 @@ impl Processor {
 		}
 	}
 
-	pub (super) fn op_JNE(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_JNE(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let comparison = self.reg_t as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
@@ -190,7 +190,7 @@ impl Processor {
 		}
 	}
 
-	pub (super) fn op_EXTI(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_EXTI(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, true);
 		self.machine_extension = value_1;
 
@@ -198,7 +198,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_ADD(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_ADD(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 		
@@ -208,7 +208,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SUB(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SUB(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 		
@@ -218,7 +218,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_MUL(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_MUL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 		
@@ -228,7 +228,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_DIV(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_DIV(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 		
@@ -238,7 +238,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_MOD(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_MOD(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 		
@@ -248,7 +248,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SMUL(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SMUL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false) as i16;
 		let value_2 = self.target_read(ram, operand_2, true) as i16;
 
@@ -258,7 +258,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SDIV(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SDIV(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false) as i16;
 		let value_2 = self.target_read(ram, operand_2, true) as i16;
 
@@ -268,7 +268,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SMOD(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SMOD(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false) as i16;
 		let value_2 = self.target_read(ram, operand_2, true) as i16;
 
@@ -278,7 +278,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_AND(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_AND(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 		
@@ -288,7 +288,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_OR(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_OR(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 
@@ -298,7 +298,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_XOR(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_XOR(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 
@@ -308,7 +308,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SHL(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SHL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 
@@ -318,7 +318,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SHR(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SHR(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 
@@ -328,7 +328,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SAR(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SAR(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false) as i16;
 		let value_2 = self.target_read(ram, operand_2, true) as i16;
 
@@ -338,7 +338,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SET(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SET(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_2 = self.target_read(ram, operand_2, true);
 
 		self.target_write(ram, operand_1, value_2);
@@ -347,7 +347,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_GET(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_GET(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 
 		self.target_write(ram, operand_2, value_1);
@@ -356,7 +356,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_SWAP(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_SWAP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 
@@ -367,7 +367,7 @@ impl Processor {
 		operand_count + 1
 	}
 
-	pub (super) fn op_CMP(&mut self, ram: &mut Box<dyn Memory>, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
+	pub (super) fn op_CMP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false) as i16;
 		let value_2 = self.target_read(ram, operand_2, true) as i16;
 
