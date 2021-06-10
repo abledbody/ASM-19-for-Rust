@@ -9,7 +9,7 @@ pub trait Memory {
 	}
 
 	/// This method should be overriden by the implementor of Memory. It will return a MemoryWriteError by default.
-	fn write(&self, address: u16, value: u16) -> Result<(), MemoryWriteError> {
+	fn write(&mut self, address: u16, value: u16) -> Result<(), MemoryWriteError> {
 		Err(MemoryWriteError {
 			message: format!("Memory trait write function not implemented"),
 			address,

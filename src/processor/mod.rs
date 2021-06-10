@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use std::num::Wrapping;
+
 use crate::memory;
 use std::fmt;
 mod operations;
@@ -11,14 +13,14 @@ use operand_target::*;
 /// An emulated ASM-19 processor.
 pub struct Processor {
 	halted: bool,
-	reg_a: u16,
-	reg_b: u16,
-	reg_c: u16,
-	reg_t: u16,
-	reg_sp: u16,
-	reg_vp: u16,
-	reg_pp: u16,
-	reg_fl: u16,
+	reg_a: Wrapping<u16>,
+	reg_b: Wrapping<u16>,
+	reg_c: Wrapping<u16>,
+	reg_t: Wrapping<u16>,
+	reg_sp: Wrapping<u16>,
+	reg_vp: Wrapping<u16>,
+	reg_pp: Wrapping<u16>,
+	reg_fl: Wrapping<u16>,
 	machine_extension: u16,
 }
 
@@ -45,14 +47,14 @@ impl Processor {
 	pub fn new() -> Processor {
 		Processor {
 			halted: false,
-			reg_a: 0,
-			reg_b: 0,
-			reg_c: 0,
-			reg_t: 0,
-			reg_sp: 0,
-			reg_vp: 0,
-			reg_pp: 0,
-			reg_fl: 0,
+			reg_a: Wrapping(0),
+			reg_b: Wrapping(0),
+			reg_c: Wrapping(0),
+			reg_t: Wrapping(0),
+			reg_sp: Wrapping(0),
+			reg_vp: Wrapping(0),
+			reg_pp: Wrapping(0),
+			reg_fl: Wrapping(0),
 			machine_extension: 0,
 		}
 	}
@@ -66,7 +68,8 @@ impl Processor {
 			if log {
 				println!("	{}", self);
 			}
-			self.reg_pp += self.execute(ram, instruction, log);
+			let instruction_length = self.execute(ram, instruction, log);
+			self.reg_pp += Wrapping(instruction_length);
 		}
 	}
 
@@ -74,16 +77,16 @@ impl Processor {
 	// such as if a RAM module is smaller than 64 Kb.
 	
 	// Defaults to reading zero
-	fn read_mem(ram: &dyn memory::Memory, address: u16) -> u16 {
-		match ram.read(address) {
-			Ok(value) => value,
-			Err(_) => 0,
+	fn read_mem(ram: &dyn memory::Memory, address: Wrapping<u16>) -> Wrapping<u16> {
+		match ram.read(address.0) {
+			Ok(value) => Wrapping(value),
+			Err(_) => Wrapping(0),
 		}
 	}
 	
 	// Defaults to not writing at all
-	fn write_mem(ram: &mut dyn memory::Memory, address: u16, value: u16) {
-		match ram.write(address, value) {
+	fn write_mem(ram: &mut dyn memory::Memory, address: Wrapping<u16>, value: Wrapping<u16>) {
+		match ram.write(address.0, value.0) {
 			_ => (),
 		}
 	}
@@ -91,7 +94,7 @@ impl Processor {
 	// This is where we read the program pointer register and make a computer-parsable instruction out of the opcode and its neighboring operands.
 	fn build_instruction(&self, ram: &dyn memory::Memory) -> Instruction {
 		let reg_pp = self.reg_pp;
-		let opcode = Processor::read_mem(ram, self.reg_pp);
+		let opcode = Processor::read_mem(ram, self.reg_pp).0;
 
 		// We're going to need to know ahead of time how many operands our instruction has so that we can pick the right variant
 		// and specify which kind of function we'll be using.
@@ -135,8 +138,8 @@ impl Processor {
 					0x008F..=0x0098	=>	(Processor::op_EXTI		as OneOpFunc, 0x008F),
 					_ => panic!("Impossible state"),
 				};
-				let operand_value = match ram.read(reg_pp + 1) {
-					Ok(value) => value,
+				let operand_value = match ram.read((reg_pp + Wrapping(1)).0) {
+					Ok(value) => Wrapping(value),
 					Err(_) => {return Instruction::NoOperand(Processor::op_HALT);},
 				};
 				let operand_target = OperandTarget::get_operand_type(opcode - base_opcode, operand_value).unwrap();
@@ -167,21 +170,21 @@ impl Processor {
 				};
 
 				let op_offset = opcode - base_opcode;
-				let operand_1_value = match ram.read(reg_pp + 1) {
-					Ok(value) => value,
+				let operand_1_value = match ram.read((reg_pp + Wrapping(1)).0) {
+					Ok(value) => Wrapping(value),
 					Err(_) => {return Instruction::NoOperand(Processor::op_HALT);},
 				};
 				let operand_1_target = OperandTarget::get_operand_type(op_offset % 10, operand_1_value).unwrap();
 
 				// If the first operand has attached data we need to look at the next byte over for our second operand.
 				let operand_2_address = match operand_1_target {
-					OperandTarget::FromMem(_) => reg_pp + 2,
-					OperandTarget::Literal(_) => reg_pp + 2,
-					_ => reg_pp + 1,
+					OperandTarget::FromMem(_) => reg_pp + Wrapping(2),
+					OperandTarget::Literal(_) => reg_pp + Wrapping(2),
+					_ => reg_pp + Wrapping(1),
 				};
 				
-				let operand_2_value = match ram.read(operand_2_address) {
-					Ok(value) => value,
+				let operand_2_value = match ram.read(operand_2_address.0) {
+					Ok(value) => Wrapping(value),
 					Err(_) => {return Instruction::NoOperand(Processor::op_HALT);},
 				};
 				let operand_2_target = OperandTarget::get_operand_type(op_offset / 10, operand_2_value).unwrap();
@@ -206,7 +209,7 @@ impl Processor {
 
 	// Since each type of OperandTarget has a different place to write to and way of handling it, the
 	// target_write and target_read functions act as the go-between for finding the right address/register.
-	pub (crate) fn target_write(&mut self, ram: &mut dyn memory::Memory, operandTarget: OperandTarget, value: u16) {
+	pub (crate) fn target_write(&mut self, ram: &mut dyn memory::Memory, operandTarget: OperandTarget, value: Wrapping<u16>) {
 		match operandTarget {
 			OperandTarget::RegA					=> { self.reg_a		= value; }
 			OperandTarget::RegB					=> { self.reg_b		= value; }
@@ -218,13 +221,13 @@ impl Processor {
 			OperandTarget::RegFL				=> { self.reg_fl	= value; }
 			OperandTarget::Literal(address)		=> { Processor::write_mem(ram, address, value); }
 			OperandTarget::FromMem(data)		=> { 
-				let write_address = from_mem::operand_to_address(self, data, ram);
+				let write_address = from_mem::operand_to_address(self, data.0, ram);
 				Processor::write_mem(ram, write_address, value);
 			}
 		}
 	}
 
-	pub (crate) fn target_read(&self, ram: &dyn memory::Memory, operand: OperandTarget, source: bool) -> u16 {
+	pub (crate) fn target_read(&self, ram: &dyn memory::Memory, operand: OperandTarget, source: bool) -> Wrapping<u16> {
 		match operand {
 			OperandTarget::RegA				=> { self.reg_a		}
 			OperandTarget::RegB				=> { self.reg_b		}
@@ -243,7 +246,7 @@ impl Processor {
 				}
 			}
 			OperandTarget::FromMem(data)		=> {
-				let read_address = from_mem::operand_to_address(self, data, ram);
+				let read_address = from_mem::operand_to_address(self, data.0, ram);
 				Processor::read_mem(ram, read_address)
 			}
 		}

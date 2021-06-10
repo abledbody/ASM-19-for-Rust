@@ -1,3 +1,4 @@
+use std::num::Wrapping;
 use std::fmt;
 use super::from_mem::FromMemType;
 
@@ -11,8 +12,8 @@ pub (crate) enum OperandTarget {
 	RegVP, // V-stack pointer
 	RegPP, // Program pointer
 	RegFL, // Flags
-	Literal(u16),
-	FromMem(u16),
+	Literal(Wrapping<u16>),
+	FromMem(Wrapping<u16>),
 }
 
 impl fmt::Display for OperandTarget {
@@ -29,7 +30,7 @@ impl fmt::Display for OperandTarget {
 			OperandTarget::RegPP =>	write!(f, "PP"),
 			OperandTarget::RegFL =>	write!(f, "FL"),
 			OperandTarget::Literal(_) => write!(f, "Literal"),
-			OperandTarget::FromMem(data) => write!(f, "FromMem({})", FromMemType::create_from_operand(*data)),
+			OperandTarget::FromMem(data) => write!(f, "FromMem({})", FromMemType::create_from_operand(data.0)),
 		}
 	}
 }
@@ -64,7 +65,7 @@ impl OperandTarget {
 	}
 
 	// Converts an operator offset into an OperandTarget.
-	pub (super) fn get_operand_type(operation_offset: u16, operand_value: u16) -> Result<OperandTarget, String> {
+	pub (super) fn get_operand_type(operation_offset: u16, operand_value: Wrapping<u16>) -> Result<OperandTarget, String> {
 		match operation_offset {
 			0 => Ok(OperandTarget::RegA),
 			1 => Ok(OperandTarget::RegB),

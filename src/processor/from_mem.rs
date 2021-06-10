@@ -1,12 +1,14 @@
 use std::fmt;
+use std::num::Wrapping;
+
 use crate::processor::Processor;
 use crate::memory::Memory;
 use super::operand_target::*;
 
 #[derive(Copy, Clone)]
 pub (super) enum FromMemType {
-	Single(OperandTarget, i16),
-	Double(OperandTarget, OperandTarget, i16, bool),
+	Single(OperandTarget, Wrapping<u16>),
+	Double(OperandTarget, OperandTarget, Wrapping<u16>, bool),
 }
 
 impl fmt::Display for FromMemType {
@@ -30,15 +32,15 @@ impl FromMemType {
 
 			// offset is a 12 bit number. Rust can't handle the signage of this number,
 			// so we're going to convert whatever it is into an i16 manually.
-			let offset: i16 = if negative_offset {
+			let offset = if negative_offset {
 				// We know this is a negative number that's equal to or above -(2^6),
 				// so we can simply stick in the extra 1s to convert it into an i16.
-				(0b1111000000000000 | offset) as i16
+				0b1111000000000000 | offset
 			}
 			else {
 				// The extra 4 bits were already 0 when we created this byte, so
 				// since it's positive we don't need to do anything special.
-				offset as i16
+				offset
 			};
 
 			let register = match OperandTarget::index_to_register(register) {
@@ -46,13 +48,13 @@ impl FromMemType {
 				None => panic!("Impossible state"),
 			};
 
-			FromMemType::Single(register, offset as i16)
+			FromMemType::Single(register, Wrapping(offset))
 		}
 		else {
-			let register_1 = operand &	0b111;				// 0000,0000,0000,0111
+			let register_1 = operand &		0b111;			// 0000,0000,0000,0111
 			let register_2 = operand >> 4 & 0b111;			// 0000,0000,0111,0000
-			let subtract = operand & 	0b10000000 > 0;		// 0000,0000,1000,0000
-			let offset = (operand >> 8 & 0b11111111) as i8;// 1111,1111,0000,0000
+			let subtract = operand & 		0b10000000 > 0;	// 0000,0000,1000,0000
+			let offset = operand >> 8 & 	0b11111111;		// 1111,1111,0000,0000
 
 			let register_1 = match OperandTarget::index_to_register(register_1) {
 				Some(reg) => reg,
@@ -64,25 +66,25 @@ impl FromMemType {
 				None => panic!("Impossible state"),
 			};
 
-			FromMemType::Double(register_1, register_2, offset as i16, subtract)
+			FromMemType::Double(register_1, register_2, Wrapping(offset), subtract)
 		}
 		
 	}
 }
 
 // Turns an operand in a FromMem based instruction into a concrete address.
-pub (super) fn operand_to_address(cpu: &Processor, data: u16, ram: &dyn Memory) -> u16 {
+pub (super) fn operand_to_address(cpu: &Processor, data: u16, ram: &dyn Memory) -> Wrapping<u16> {
 	let from_mem_type = FromMemType::create_from_operand(data);
 
 	let address = match from_mem_type {
 		FromMemType::Single(reg, offset) => {
-			cpu.target_read(ram, reg, false) + offset as u16
+			cpu.target_read(ram, reg, false) + offset
 		},
 		FromMemType::Double(reg_a, reg_b, offset, subtract) => {
 			let reg_b = cpu.target_read(ram, reg_b, false);
 			let reg_a = cpu.target_read(ram, reg_a, false);
-			let reg_b_signed = if subtract {-(reg_b as i16)} else {reg_b as i16};
-			reg_a + reg_b_signed as u16 + offset as u16
+			let reg_b_signed = if subtract {-reg_b} else {reg_b};
+			reg_a + reg_b_signed + offset
 		}
 	};
 

@@ -1,3 +1,5 @@
+use std::num::Wrapping;
+
 use crate::processor::{OperandTarget, Processor};
 use crate::memory::Memory;
 
@@ -15,7 +17,7 @@ impl Processor {
 	}
 
 	pub (super) fn op_RET(&mut self, ram: &mut dyn Memory, log: bool) -> u16 {
-		self.reg_sp -= 1;
+		self.reg_sp -= Wrapping(1);
 		self.reg_pp = Processor::read_mem(ram, self.reg_sp);
 
 		if log {println!("RET to {:04X}", self.reg_pp);}
@@ -23,8 +25,8 @@ impl Processor {
 	}
 
 	pub (super) fn op_NEG(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let value_1 = self.target_read(ram, operand_1, false) as i16;
-		self.target_write(ram, operand_1, (-value_1) as u16);
+		let value_1 = self.target_read(ram, operand_1, false).0 as i16;
+		self.target_write(ram, operand_1, Wrapping((-value_1) as u16));
 
 		if log {println!("NEG	{}({:04X})", operand_1, value_1);}
 		operand_count + 1
@@ -43,14 +45,14 @@ impl Processor {
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		Processor::write_mem(ram, self.reg_sp, value_1);
-		self.reg_sp += 1;
+		self.reg_sp += Wrapping(1);
 
-		if log {println!("PUSH	{}({:04X}) to {:04X}", operand_1, value_1, self.reg_sp - 1);}
+		if log {println!("PUSH	{}({:04X}) to {:04X}", operand_1, value_1, self.reg_sp - Wrapping(1));}
 		operand_count + 1
 	}
 
 	pub (super) fn op_POP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		self.reg_sp -= 1;
+		self.reg_sp -= Wrapping(1);
 		let value_1 = Processor::read_mem(ram, self.reg_sp);
 		self.target_write(ram, operand_1, value_1);
 
@@ -62,14 +64,14 @@ impl Processor {
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		Processor::write_mem(ram, self.reg_vp, value_1);
-		self.reg_vp += 1;
+		self.reg_vp += Wrapping(1);
 
-		if log {println!("VPUSH	{}({:04X}) to {:04X}", operand_1, value_1, self.reg_vp - 1);}
+		if log {println!("VPUSH	{}({:04X}) to {:04X}", operand_1, value_1, self.reg_vp - Wrapping(1));}
 		operand_count + 1
 	}
 
 	pub (super) fn op_VPOP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		self.reg_vp -= 1;
+		self.reg_vp -= Wrapping(1);
 		let value_1 = Processor::read_mem(ram, self.reg_vp);
 		self.target_write(ram, operand_1, value_1);
 
@@ -78,10 +80,10 @@ impl Processor {
 	}
 
 	pub (super) fn op_CALL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let return_dest = self.reg_pp + operand_count + 1;
+		let return_dest = self.reg_pp + Wrapping(operand_count + 1);
 
 		Processor::write_mem(ram, self.reg_sp, return_dest);
-		self.reg_sp += 1;
+		self.reg_sp += Wrapping(1);
 		self.reg_pp = self.target_read(ram, operand_1, true);
 
 		if log {println!("CALL	{}({:04X} pushing {:04X})", operand_1, self.reg_pp, return_dest);}
@@ -96,7 +98,7 @@ impl Processor {
 	}
 
 	pub (super) fn op_JG(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let comparison = self.reg_t as i16;
+		let comparison = self.reg_t.0 as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		if comparison > 0 {
@@ -112,7 +114,7 @@ impl Processor {
 	}
 
 	pub (super) fn op_JNG(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let comparison = self.reg_t as i16;
+		let comparison = self.reg_t.0 as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		if comparison <= 0 {
@@ -127,7 +129,7 @@ impl Processor {
 	}
 
 	pub (super) fn op_JL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let comparison = self.reg_t as i16;
+		let comparison = self.reg_t.0 as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		if comparison < 0 {
@@ -143,7 +145,7 @@ impl Processor {
 	}
 
 	pub (super) fn op_JNL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let comparison = self.reg_t as i16;
+		let comparison = self.reg_t.0 as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		if comparison >= 0 {
@@ -159,7 +161,7 @@ impl Processor {
 	}
 
 	pub (super) fn op_JE(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let comparison = self.reg_t as i16;
+		let comparison = self.reg_t.0 as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		if comparison == 0 {
@@ -175,7 +177,7 @@ impl Processor {
 	}
 
 	pub (super) fn op_JNE(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let comparison = self.reg_t as i16;
+		let comparison = self.reg_t.0 as i16;
 		let value_1 = self.target_read(ram, operand_1, true);
 
 		if comparison != 0 {
@@ -192,7 +194,7 @@ impl Processor {
 
 	pub (super) fn op_EXTI(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, true);
-		self.machine_extension = value_1;
+		self.machine_extension = value_1.0;
 
 		if log {println!("EXTI	{}({:04X})", operand_1, value_1);}
 		operand_count + 1
@@ -249,30 +251,30 @@ impl Processor {
 	}
 
 	pub (super) fn op_SMUL(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let value_1 = self.target_read(ram, operand_1, false) as i16;
-		let value_2 = self.target_read(ram, operand_2, true) as i16;
+		let value_1 = Wrapping(self.target_read(ram, operand_1, false).0 as i16);
+		let value_2 = Wrapping(self.target_read(ram, operand_2, true).0 as i16);
 
-		self.target_write(ram, operand_1, (value_1 * value_2) as u16);
+		self.target_write(ram, operand_1, Wrapping((value_1 * value_2).0 as u16));
 
 		if log {println!("SMUL	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		operand_count + 1
 	}
 
 	pub (super) fn op_SDIV(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let value_1 = self.target_read(ram, operand_1, false) as i16;
-		let value_2 = self.target_read(ram, operand_2, true) as i16;
+		let value_1 = Wrapping(self.target_read(ram, operand_1, false).0 as i16);
+		let value_2 = Wrapping(self.target_read(ram, operand_2, true).0 as i16);
 
-		self.target_write(ram, operand_1, (value_1 / value_2) as u16);
+		self.target_write(ram, operand_1, Wrapping((value_1 / value_2).0 as u16));
 
 		if log {println!("SDIV	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		operand_count + 1
 	}
 
 	pub (super) fn op_SMOD(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let value_1 = self.target_read(ram, operand_1, false) as i16;
-		let value_2 = self.target_read(ram, operand_2, true) as i16;
+		let value_1 = Wrapping(self.target_read(ram, operand_1, false).0 as i16);
+		let value_2 = Wrapping(self.target_read(ram, operand_2, true).0 as i16);
 
-		self.target_write(ram, operand_1, (value_1 % value_2) as u16);
+		self.target_write(ram, operand_1, Wrapping((value_1 % value_2).0 as u16));
 
 		if log {println!("SMOD	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		operand_count + 1
@@ -312,7 +314,7 @@ impl Processor {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 
-		self.target_write(ram, operand_1, value_1 << value_2);
+		self.target_write(ram, operand_1, Wrapping(value_1.0 << value_2.0));
 
 		if log {println!("SHL	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		operand_count + 1
@@ -322,17 +324,17 @@ impl Processor {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 
-		self.target_write(ram, operand_1, value_1 >> value_2);
+		self.target_write(ram, operand_1, Wrapping(value_1.0 >> value_2.0));
 
 		if log {println!("SHR	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		operand_count + 1
 	}
 
 	pub (super) fn op_SAR(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let value_1 = self.target_read(ram, operand_1, false) as i16;
-		let value_2 = self.target_read(ram, operand_2, true) as i16;
+		let value_1 = Wrapping(self.target_read(ram, operand_1, false).0 as i16);
+		let value_2 = Wrapping(self.target_read(ram, operand_2, true).0 as i16);
 
-		self.target_write(ram, operand_1, (value_1 >> value_2) as u16);
+		self.target_write(ram, operand_1, Wrapping((value_1.0 >> value_2.0) as u16));
 
 		if log {println!("SAR	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		operand_count + 1
@@ -368,10 +370,10 @@ impl Processor {
 	}
 
 	pub (super) fn op_CMP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
-		let value_1 = self.target_read(ram, operand_1, false) as i16;
-		let value_2 = self.target_read(ram, operand_2, true) as i16;
+		let value_1 = Wrapping(self.target_read(ram, operand_1, false).0 as i16);
+		let value_2 = Wrapping(self.target_read(ram, operand_2, true).0 as i16);
 
-		self.reg_t = (value_1 - value_2) as u16;
+		self.reg_t = Wrapping((value_1 - value_2).0 as u16);
 
 		if log {println!("CMP	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		operand_count + 1
