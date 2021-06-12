@@ -1,4 +1,27 @@
 /// The Processor expects to be given a struct implementing the Memory trait so that it can read and write to it.
+///
+/// # Example
+///
+/// ```
+/// use asm_19::memory::*;
+///
+/// const ADDRESSES: usize = 1 << 16;
+///
+/// struct SimpleMem {
+///     data: [u16; ADDRESSES]
+/// }
+///  
+/// impl Memory for SimpleMem {
+///     fn read(&self, address: u16) -> Result<u16, MemoryReadError> {
+/// 		Ok(self.data[address as usize])
+/// 	}
+///      
+///     fn write(&mut self, address: u16, value: u16) -> Result<(), MemoryWriteError> {
+/// 		self.data[address as usize] = value;
+/// 		Ok(())
+/// 	}
+/// }
+/// ```
 pub trait Memory {
 	/// This method should be overriden by the implementor of Memory. It will return a MemoryReadError by default.
 	fn read(&self, address: u16) -> Result<u16, MemoryReadError> {

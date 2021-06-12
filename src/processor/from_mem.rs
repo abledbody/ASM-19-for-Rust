@@ -23,19 +23,19 @@ impl fmt::Display for FromMemType {
 impl FromMemType {
 	pub (super) fn create_from_operand(operand: u16) -> FromMemType {
 		// These visual guides show which bits of the original byte these variables refer to.
-		let one_register = operand & 0b1000 == 0;					// 0000,0000,0000,1000
+		let one_register = operand & 0b1000 == 0;				// 0000,0000,0000,1000
 
 		if one_register {
-			let register = operand & 0b111;						// 0000,0000,0000,0111
-			let offset = operand >> 4 & 0b111111111111;			// 1111,1111,1111,0000
-			let negative_offset = offset & 0b100000000000 > 0;	// 1000,0000,0000,0000
+			let register = operand & 0b0111;						// 0000,0000,0000,0111
+			let offset = operand >> 4 & 0b1111_1111_1111;			// 1111,1111,1111,0000
+			let negative_offset = offset & 0b1000_0000_0000 > 0;	// 1000,0000,0000,0000
 
 			// offset is a 12 bit number. Rust can't handle the signage of this number,
 			// so we're going to convert whatever it is into an i16 manually.
 			let offset = if negative_offset {
 				// We know this is a negative number that's equal to or above -(2^6),
 				// so we can simply stick in the extra 1s to convert it into an i16.
-				0b1111000000000000 | offset
+				0b1111_0000_0000_0000 | offset
 			}
 			else {
 				// The extra 4 bits were already 0 when we created this byte, so
@@ -51,10 +51,10 @@ impl FromMemType {
 			FromMemType::Single(register, Wrapping(offset))
 		}
 		else {
-			let register_1 = operand &		0b111;			// 0000,0000,0000,0111
-			let register_2 = operand >> 4 & 0b111;			// 0000,0000,0111,0000
-			let subtract = operand & 		0b10000000 > 0;	// 0000,0000,1000,0000
-			let offset = operand >> 8 & 	0b11111111;		// 1111,1111,0000,0000
+			let register_1 = operand & 0b111;			// 0000,0000,0000,0111
+			let register_2 = operand >> 4 & 0b111;		// 0000,0000,0111,0000
+			let subtract = operand & 0b1000_0000 > 0;	// 0000,0000,1000,0000
+			let offset = operand >> 8 & 0b1111_1111;	// 1111,1111,0000,0000
 
 			let register_1 = match OperandTarget::index_to_register(register_1) {
 				Some(reg) => reg,
