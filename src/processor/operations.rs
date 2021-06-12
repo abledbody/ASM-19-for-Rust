@@ -234,6 +234,10 @@ impl Processor {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
 		
+		if value_2.0 == 0 {
+			return self.op_HALT(ram, false);
+		}
+		
 		self.target_write(ram, operand_1, value_1 / value_2);
 
 		if log {println!("DIV	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
@@ -243,6 +247,10 @@ impl Processor {
 	pub (super) fn op_MOD(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = self.target_read(ram, operand_1, false);
 		let value_2 = self.target_read(ram, operand_2, true);
+		
+		if value_2.0 == 0 {
+			return self.op_HALT(ram, false);
+		}
 		
 		self.target_write(ram, operand_1, value_1 % value_2);
 
@@ -263,7 +271,11 @@ impl Processor {
 	pub (super) fn op_SDIV(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = Wrapping(self.target_read(ram, operand_1, false).0 as i16);
 		let value_2 = Wrapping(self.target_read(ram, operand_2, true).0 as i16);
-
+		
+		if value_2.0 == 0 {
+			return self.op_HALT(ram, false);
+		}
+		
 		self.target_write(ram, operand_1, Wrapping((value_1 / value_2).0 as u16));
 
 		if log {println!("SDIV	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
@@ -274,6 +286,10 @@ impl Processor {
 		let value_1 = Wrapping(self.target_read(ram, operand_1, false).0 as i16);
 		let value_2 = Wrapping(self.target_read(ram, operand_2, true).0 as i16);
 
+		if value_2.0 == 0 {
+			return self.op_HALT(ram, false);
+		}
+		
 		self.target_write(ram, operand_1, Wrapping((value_1 % value_2).0 as u16));
 
 		if log {println!("SMOD	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
