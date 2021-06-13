@@ -56,6 +56,13 @@ pub struct MemoryWriteError {
 }
 
 /// Merges the first two indices of the provided slice into a u16.
+/// # Example
+/// ```
+/// use asm_19::memory;
+///
+/// let value = memory::merge_16(&[0x20, 0x18]);
+/// assert_eq!(value, 0x2018);
+/// ```
 pub fn merge_16(slice: &[u8]) -> u16 {
 	let byte_a = slice[0] as u16;
 	let byte_b = slice[1] as u16;

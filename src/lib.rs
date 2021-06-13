@@ -28,9 +28,13 @@
 //!         data: [0; ADDRESSES]
 //!     };
 //! 
-//!     while true {
-//!         cpu.tick(&mut ram, true);
-//!     }
+//! 	// Very short program that jumps to address 16 before halting.
+//!     ram.write(0, 0x51); // JMP, literal
+//! 	ram.write(1, 0x10);
+//!
+//! 	// We have the logger enabled for this example, but in serious use cases, this should be disabled.
+//! 	cpu.tick(&mut ram, true);
+//! 	cpu.tick(&mut ram, true);
 //! }
 //! ```
 

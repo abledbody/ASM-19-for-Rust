@@ -388,10 +388,55 @@ impl Processor {
 	pub (super) fn op_CMP(&mut self, ram: &mut dyn Memory, operand_1: OperandTarget, operand_2: OperandTarget, operand_count: u16, log: bool) -> u16 {
 		let value_1 = Wrapping(self.target_read(ram, operand_1, false).0 as i16);
 		let value_2 = Wrapping(self.target_read(ram, operand_2, true).0 as i16);
-
-		self.reg_t = Wrapping((value_1 - value_2).0 as u16);
+		
+		let is_negative = value_2.0 < 0;
+		let output = match value_1.0.checked_sub(value_2.0) {
+			Some(value) => value,
+			None => {
+				if is_negative {i16::MAX} else {i16::MIN}
+			}
+		};
+		
+		self.reg_t = Wrapping(output as u16);
 
 		if log {println!("CMP	{}({:04X}) {}({:04X})", operand_1, value_1, operand_2, value_2);}
 		operand_count + 1
 	}
+}
+
+#[test]
+fn cmp_test() {
+	let mut cpu = Processor::new();
+	struct TestMem {
+		data: [u16; 0x10000]
+	}
+	impl Memory for TestMem {
+		fn read(&self, address: u16) -> Result<u16, crate::memory::MemoryReadError> {
+			Ok(self.data[address as usize])
+		}
+		fn write(&mut self, _: u16, _: u16) -> Result<(), crate::memory::MemoryWriteError> {
+			Ok(())
+		}
+	}
+	let mut ram = TestMem {
+		data: [0; 0x10000]
+	};
+	
+	cpu.reg_a = Wrapping(i16::MIN as u16);
+	cpu.reg_b = Wrapping(1);
+	cpu.op_CMP(&mut ram, OperandTarget::RegA, OperandTarget::RegB, 0, true);
+	
+	assert_eq!(cpu.reg_t.0, i16::MIN as u16);
+	
+	cpu.reg_a = Wrapping(i16::MAX as u16);
+	cpu.reg_b = Wrapping(-(1 as i16) as u16);
+	cpu.op_CMP(&mut ram, OperandTarget::RegA, OperandTarget::RegB, 0, true);
+
+	assert_eq!(cpu.reg_t.0, i16::MAX as u16);
+	
+	cpu.reg_a = Wrapping(15);
+	cpu.reg_b = Wrapping(18);
+	cpu.op_CMP(&mut ram, OperandTarget::RegA, OperandTarget::RegB, 0, true);
+	
+	assert_eq!(cpu.reg_t.0, -(3 as i16) as u16);
 }

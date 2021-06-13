@@ -38,7 +38,7 @@ enum Instruction {
 /// Displays the state of all registers in the processor.
 impl fmt::Display for Processor {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "A: {:04X}	B: {:04X}	C: {:04X}	T: {:04X}	SP: {:04X}	VP:	{:04X}	PP: {:04X}	FL:	{:04X}", self.reg_a, self.reg_b, self.reg_c, self.reg_t, self.reg_sp, self.reg_vp, self.reg_pp, self.reg_fl)
+		write!(f, "A: {:04X}	B: {:04X}	C: {:04X}	T: {:04X}	SP: {:04X}	VP:	{:04X}	PP: {:04X}	FL:	{:04X}	HALTED?:	{}", self.reg_a, self.reg_b, self.reg_c, self.reg_t, self.reg_sp, self.reg_vp, self.reg_pp, self.reg_fl, self.halted)
 	}
 }
 
